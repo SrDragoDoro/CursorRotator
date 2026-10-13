@@ -100,21 +100,12 @@ Genera `.\paquete\` con `CursorRotator.exe` + `Cursores\*.zip|*.rar` + `LEEME.tx
 Quien lo reciba solo ejecuta el .exe y pulsa **Instalación en 1 clic**:
 la app autodetecta el material junto al ejecutable.
 
-## Compartir y mantener actualizado
+## Actualizaciones
 
-1. **Publica en GitHub:** crea un repo (p. ej. `tu-usuario/CursorRotator`),
-   súbelo, y crea un Release con tag `vX.Y.Z` (igual que `<Version>` del
-   `.csproj`). Genera el adjunto con:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File Empaquetar.ps1
-   powershell -ExecutionPolicy Bypass -File Publicar-Release.ps1
-   ```
-   Sube `dist\CursorRotator-vX.Y.Z.zip` al release. Comparte el enlace.
-2. **Aviso en la app:** en ⚙️ Opciones Avanzadas escribe tu repo
-   (`dueño/CursorRotator`) y pulsa **🔄 Buscar ahora**. La app compara el
-   tag con su versión, muestra las novedades y descarga el `.zip`;
-   además avisa sola al abrir (máx. 1 vez al día, omisible por versión).
-   Quien la reciba solo pone el mismo repo una vez y listo.
+La app avisa sola cuando hay una versión nueva (también puedes buscarla
+cuando quieras en ⚙️ Opciones Avanzadas → **🔄 Buscar ahora**). Para
+actualizar: descarga el `.zip`, cierra la app, descomprímelo y ejecuta el
+nuevo `CursorRotator.exe`. Tus ajustes se conservan.
 
 ## Diagnóstico
 

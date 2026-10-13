@@ -17,7 +17,9 @@ aleatorio), galerías con tarjetas y marcos en degradado orbital.
 
 ```text
 README.md            # manual de usuario (ES)
-AGENTS.md            # este archivo
+AGENTS.md            # este archivo (traspaso IA)
+CONTRIBUTING.md      # guía del mantenedor (publicar releases)
+LICENSE              # MIT | .gitignore (sin binarios ni zips)
 Empaquetar.ps1       # publish Release → dist\ → arma paquete\
 Publicar-Release.ps1 # paquete\ → dist\CursorRotator-vX.Y.Z.zip (para Releases)
 assets\              # app.ico, icon-src.png, splash.jpg (embebidos)

@@ -16,6 +16,7 @@ uidump*.txt
 cardsdump.txt
 rolesdump.txt
 rolesout*.txt
+roleserr.txt
 ok.txt
 worm*.png
 orbit*.png

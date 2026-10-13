@@ -80,7 +80,7 @@ public sealed class AppSettings
     /// <summary>Animación orbital de los marcos de tarjetas.</summary>
     public bool CardAnimation { get; set; } = true;
     /// <summary>Repo GitHub "dueño/nombre" para buscar actualizaciones.</summary>
-    public string UpdateRepo { get; set; } = "";
+    public string UpdateRepo { get; set; } = "SrDragoDoro/CursorRotator";
     /// <summary>Avisar automáticamente al abrir (máx. 1 vez al día).</summary>
     public bool CheckUpdates { get; set; } = true;
     /// <summary>Último aviso consultado (yyyy-MM-dd).</summary>
@@ -108,6 +108,9 @@ public sealed class AppSettings
                 if (s.IntervalSeconds <= 0)
                     s.IntervalSeconds = Math.Max(5, s.IntervalMinutes * 60.0);
                 if (string.IsNullOrWhiteSpace(s.ScheduledTime)) s.ScheduledTime = "09:00";
+                // Repo por defecto: los ajustes viejos lo tienen vacío.
+                if (string.IsNullOrWhiteSpace(s.UpdateRepo))
+                    s.UpdateRepo = "SrDragoDoro/CursorRotator";
                 // Migración de agenda: de una hora a lista de horas.
                 if (s.ScheduledTimes is null || s.ScheduledTimes.Count == 0)
                     s.ScheduledTimes = new List<string> { s.ScheduledTime };

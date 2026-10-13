@@ -1,0 +1,28 @@
+# Salidas de compilación y empaquetado (se regeneran: Empaquetar.ps1)
+dist/
+paquete/
+src/bin/
+src/obj/
+.vs/
+
+# Packs de cursores (binarios pesados; cada quien los pone junto al exe)
+*.zip
+*.rar
+
+# Diagnóstico local y volcados de los modos CLI
+crash.log
+settings-audit.log
+uidump*.txt
+cardsdump.txt
+rolesdump.txt
+rolesout*.txt
+ok.txt
+worm*.png
+orbit*.png
+*.tmp
+
+# Visual Studio / Windows
+*.user
+*.suo
+Desktop.ini
+Thumbs.db

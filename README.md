@@ -13,7 +13,7 @@ puntero, con increíbles efectos visuales que **casi no consumen recursos**.
 
 Sin instaladores eternos ni permisos de Administrador. Solo:
 
-1. 📥 Descarga el archivo desde **Releases**.
+1. 📥 Descarga el archivo desde **[Releases](https://github.com/SrDragoDoro/CursorRotator/releases/tag/v2.5.0)**.
 2. 📂 Extrae la carpeta donde quieras.
 3. ▶️ Ejecuta **`CursorRotator.exe`**.
 

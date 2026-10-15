@@ -7,10 +7,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWindowsForms>true</UseWindowsForms>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <!-- PerMonitorV2 real (no el SystemAware por defecto): coordenadas físicas
+         1:1 para el overlay en ultrawide y multi-monitor con distinto DPI. -->
+    <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <Version>2.5.0</Version>
     <AssemblyName>CursorRotator</AssemblyName>
     <RootNamespace>CursorRotator</RootNamespace>
     <ApplicationIcon>..\assets\app.ico</ApplicationIcon>
+    <!-- WFO0003 se silencia a propósito: el manifest declara PerMonitorV2
+         ALINEADO con ApplicationHighDpiMode (defensa en profundidad +
+         requisito explícito de tracking 1:1). Sin conflicto real. -->
+    <NoWarn>$(NoWarn);WFO0003</NoWarn>
     <!-- Publicación portable en un solo .exe -->
     <PublishSingleFile>true</PublishSingleFile>
     <SelfContained>true</SelfContained>

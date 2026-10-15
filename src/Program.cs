@@ -21,7 +21,8 @@ internal static class Program
                 || args.Contains("--apply-test") || args.Contains("--dump-ui")
                 || args.Contains("--diag-scroll") || args.Contains("--roles-test")
                 || args.Contains("--settings-test") || args.Contains("--queue-test")
-                || args.Contains("--cards-test") || args.Contains("--update-test");
+                || args.Contains("--cards-test") || args.Contains("--update-test")
+                || args.Contains("--mapping-test");
         if (cli) AllocConsole(); // El .exe es WinExe: crea consola para el modo CLI.
 
         // Capturador global: en GUI escribe crash.log + MessageBox en vez de morir en silencio.
@@ -208,6 +209,9 @@ internal static class Program
                 ?? "nadie/noexiste12345";
             return UpdateTest(repo);
         }
+
+        if (args.Contains("--mapping-test"))
+            return MappingTest();
 
         if (args.Contains("--install"))
         {
@@ -851,6 +855,59 @@ internal static class Program
         var info = UpdateChecker.CheckAsync(repo).GetAwaiter().GetResult();
         Check($"repo '{repo}' sin crash (hasUpdate={info.HasUpdate})", true);
         Console.WriteLine($"actual={UpdateChecker.CurrentVersion}");
+        Console.WriteLine(ok ? "=== ALL PASS ===" : "=== FAIL ===");
+        return ok ? 0 : 1;
+    }
+
+    /// <summary>
+    /// Pixel-Perfect Tracking sin hardware: matemática del mapper con un
+    /// escritorio virtual sintético (ultrawide + secundario a la izquierda)
+    /// y parser Raw Input con buffers RAWINPUT fabricados (absoluto,
+    /// relativo y no-ratón).
+    /// </summary>
+    private static int MappingTest()
+    {
+        bool ok = true;
+        void Check(string n, bool cond, string detail = "")
+        {
+            ok &= cond;
+            Console.WriteLine($"{(cond ? "ok  " : "DIF ")} {n} {detail}");
+        }
+
+        // Ultrawide 5120×1440 + secundario 1920 a la izquierda (origen -1920).
+        var vs = new Rectangle(-1920, 0, 7040, 1440);
+        var primary = new Rectangle(0, 0, 5120, 1440);
+
+        var c = CursorPointMapper.MapAbsoluteToScreen(32768, 32768, true, vs, primary);
+        Check("absoluto-centro", c.X == 1600 && c.Y == 720, $"=({c.X},{c.Y})");
+        var o = CursorPointMapper.MapAbsoluteToScreen(0, 0, true, vs, primary);
+        Check("absoluto-origen", o.X == -1920 && o.Y == 0, $"=({o.X},{o.Y})");
+        var f = CursorPointMapper.MapAbsoluteToScreen(65535, 65535, true, vs, primary);
+        Check("absoluto-fin", f.X == 5120 && f.Y == 1440, $"=({f.X},{f.Y})");
+        var p = CursorPointMapper.MapAbsoluteToScreen(0, 0, false, vs, primary);
+        Check("absoluto-primaria", p.X == 0 && p.Y == 0, $"=({p.X},{p.Y})");
+        var l = CursorPointMapper.ToLocal(new Point(1600, 720), vs);
+        Check("pantalla→local", l.X == 3520 && l.Y == 720, $"=({l.X},{l.Y})");
+        var t = CursorPointMapper.ToLayerOffset(100, 50, 1.5f);
+        Check("offset-layer", t.X == -150f && t.Y == -75f, $"=({t.X},{t.Y})");
+
+        // Núcleo puro con escritorio sintético (sin P/Invoke).
+        bool gotA = RawInputMouse.MapRawMouse(0x0003, 0, 0, vs, primary, out var pa);
+        Check("raw-absoluto", gotA && pa.X == -1920 && pa.Y == 0, $"=({pa.X},{pa.Y})");
+        bool gotF = RawInputMouse.MapRawMouse(0x0003, 65535, 65535, vs, primary, out var pf);
+        Check("raw-fin", gotF && pf.X == 5120 && pf.Y == 1440, $"=({pf.X},{pf.Y})");
+        Check("raw-relativo-rechazado",
+            !RawInputMouse.MapRawMouse(0x0000, 50, 60, vs, primary, out _));
+        // Handle falso: degradación elegante, sin excepciones.
+        nint fake = Marshal.AllocHGlobal(52);
+        try
+        {
+            Check("handle-falso-abs",
+                !RawInputMouse.TryGetAbsolutePosition(fake, out _, out _));
+            Check("handle-falso-deltas", !RawInputMouse.HandleMessage(fake));
+        }
+        finally { Marshal.FreeHGlobal(fake); }
+
         Console.WriteLine(ok ? "=== ALL PASS ===" : "=== FAIL ===");
         return ok ? 0 : 1;
     }

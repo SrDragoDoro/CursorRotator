@@ -177,11 +177,14 @@ public sealed class TrailOverlay : Form
     protected override void WndProc(ref Message m)
     {
         // WM_INPUT del driver HID → posición absoluta actual a la cola.
+        // Absoluto (tableta/digitalizador) manda: ya viene en pantalla.
         if (m.Msg == RawInputMouse.WM_INPUT && _rawActive && _started)
         {
             try
             {
-                if (RawInputMouse.HandleMessage(m.LParam))
+                if (RawInputMouse.TryGetAbsolutePosition(m.LParam, out int ax, out int ay))
+                    _points.Enqueue((ax, ay));
+                else if (RawInputMouse.HandleMessage(m.LParam))
                 {
                     NativeLayer.GetCursorPos(out int rx, out int ry);
                     _points.Enqueue((rx, ry));
@@ -233,7 +236,10 @@ public sealed class TrailOverlay : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        Size = new Size(Box, Box);
+        // Caja inicial = escritorio virtual completo (orígenes negativos
+        // incluidos): el overlay nunca se ancla solo a la primaria.
+        try { Bounds = SystemInformation.VirtualScreen; }
+        catch { Size = new Size(Box, Box); }
         BackColor = Color.Black;
     }
 
@@ -258,6 +264,7 @@ public sealed class TrailOverlay : Form
     protected override void OnLoad(EventArgs e)
     {
         base.OnLoad(e);
+        try { Bounds = SystemInformation.VirtualScreen; } catch { }
         _scale = DeviceDpi / 96f;
         RecreateBitmap();
         SystemEvents.DisplaySettingsChanged += OnDisplayChanged;
@@ -372,12 +379,31 @@ public sealed class TrailOverlay : Form
                         _lastX = pt.X; _lastY = pt.Y;
                         batch.Add((pt.X, pt.Y));
                     }
+                    if (batch.Count == 0)
+                    {
+                        // Saneamiento anti-deriva: sin eventos, la cabeza se
+                        // pega a la posición lógica de Windows (GetCursorPos),
+                        // inmune a drivers ruidosos o aceleraciones raras.
+                        NativeLayer.GetCursorPos(out int gx, out int gy);
+                        _lastX = gx; _lastY = gy;
+                        batch.Add((gx, gy));
+                    }
                 }
                 else
                 {
                     NativeLayer.GetCursorPos(out _lastX, out _lastY);
                     batch.Add((_lastX, _lastY));
                 }
+
+                // Escala DPI viva: si la ventana cambió de monitor, el bitmap
+                // se adapta solo (EnsureBitmap ya redimensiona por demanda).
+                try
+                {
+                    float live = DeviceDpi / 96f;
+                    if (live > 0 && Math.Abs(live - _scale) > 0.001f)
+                        _scale = live;
+                }
+                catch { }
 
                 if (_activeEngine is AsyncEngine ae)
                 {
@@ -532,8 +558,15 @@ public sealed class TrailOverlay : Form
             var m = _gbmp.Transform;
             try
             {
-                // De coordenadas de pantalla a píxeles del bitmap.
-                _gbmp.TranslateTransform(-wx * _scale, -wy * _scale);
+                // Normalización pantalla→bitmap (Pixel-Perfect Tracking):
+                // el motor vive en coords de pantalla (físicas con
+                // PerMonitorV2); aquí se resta el origen de la ventana
+                // layered y se escala al DPI real. Equivale a
+                // CursorPointMapper.ToLocal(pantalla, VirtualScreen) × escala.
+                // NUNCA se mezcla con coords virtualizadas (ver manifest +
+                // ApplicationHighDpiMode=PerMonitorV2).
+                var off = CursorPointMapper.ToLayerOffset(wx, wy, _scale);
+                _gbmp.TranslateTransform(off.X, off.Y);
                 _gbmp.ScaleTransform(_scale, _scale);
                 _engine.Render(_gbmp);
                 if (SecondaryEnabled)

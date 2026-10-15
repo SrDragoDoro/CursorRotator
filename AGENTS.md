@@ -86,6 +86,7 @@ dotnet build src\CursorRotator.csproj -c Release
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --roles-test "Nombre"  # diálogo de roles
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --install-test    # variantes+duplicados (limpia todo)
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --update-test [repo]  # versiones + ruta amable sin red
+.\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --mapping-test     # DPI/coords: mapper + raw (headless)
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --dump-ui 680 600 uidump.txt  # árbol de MainForm
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --self-test "dir" # parsea .inf sin escribir
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --resolve-test    # rutas crudas vs resueltas

@@ -422,6 +422,39 @@ public sealed class MainForm : Form
         LayoutRoot();
         SetupTooltips();
         WireCheckStates();
+
+        // Arrastrar y soltar paquetes sobre la ventana (o sus controles).
+        AllowDrop = true;
+        DragEnter += OnDragEnter;
+        DragDrop += OnDragDrop;
+        EnableDrop(root);
+    }
+
+    /// <summary>Permite soltar paquetes sobre cualquier control (salvo editores de texto).</summary>
+    private void EnableDrop(Control root)
+    {
+        foreach (Control c in root.Controls)
+        {
+            if (c is TextBoxBase || c is NumericUpDown || c is ComboBox) continue;
+            c.AllowDrop = true;
+            c.DragEnter += OnDragEnter;
+            c.DragDrop += OnDragDrop;
+            if (c.HasChildren) EnableDrop(c);
+        }
+    }
+
+    private void OnDragEnter(object sender, DragEventArgs e)
+    {
+        e.Effect = e.Data is not null && e.Data.GetDataPresent(DataFormats.FileDrop)
+            ? DragDropEffects.Copy : DragDropEffects.None;
+    }
+
+    private void OnDragDrop(object sender, DragEventArgs e)
+    {
+        if (e.Data is null || !e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths || paths.Length == 0) return;
+        Log($"Paquete(s) arrastrado(s): {paths.Length}");
+        _ = RunInstallAsync(paths);
     }
 
     /// <summary>
@@ -489,7 +522,7 @@ public sealed class MainForm : Form
         Tip(_btnToggle, "Activa o pausa la rotación automática de cursores.");
         Tip(_btnOnce, "Aplica ahora mismo el esquema mostrado como 'Siguiente' en la vista previa.");
         Tip(_btnManual, "Abre el panel de mouse de Windows para ajuste manual.");
-        Tip(_btnInstall, "Elige un .zip/.rar o carpeta: examina todos los cursores y marca cuáles instalar (todos o solo algunos).");
+        Tip(_btnInstall, "Elige uno o varios .zip/.rar/.7z... o una carpeta (o arrástralos a la ventana): examina todos los cursores y marca cuáles instalar (todos o solo algunos).");
         Tip(_numInterval, "Cada cuántos segundos, minutos u horas cambia el cursor (decimales con el teclado, p. ej. 1.5 min).");
         Tip(_cmbUnit, "Unidad del intervalo... u 'Horas fijas diarias' para programar varias horas concretas.");
         Tip(_dtpTime, "Elige una hora y el cursor destino, y pulsa + Añadir (p. ej. 11:00, 15:00, 18:00).");
@@ -1687,56 +1720,67 @@ public sealed class MainForm : Form
         _progressFill.Width = Math.Clamp(w * percent / 100, 0, w);
     }
 
-    private async Task RunInstallAsync()
+    private async Task RunInstallAsync(IReadOnlyList<string> preselected = null)
     {
-        // 1 clic: el usuario elige un .zip/.rar (o carpeta). Se examina el
+        // 1 clic: el usuario elige uno o VARIOS paquetes (.zip/.rar/.7z...) o
+        // una carpeta (también vale arrastrarlos a la ventana). Se examina el
         // contenido y se muestran TODOS los cursores para instalar todos o
         // solo algunos. El autodetectado solo es la sugerencia inicial.
-        string auto = CursorInstaller.AutoDetectSource();
-        string source = null;
-        using (var ofd = new OpenFileDialog
+        var sources = preselected is null ? new List<string>() : preselected.ToList();
+        if (sources.Count == 0)
         {
-            Filter = "Paquetes de cursores (*.zip;*.rar)|*.zip;*.rar|Archivos ZIP (*.zip)|*.zip|Archivos RAR (*.rar)|*.rar|Todos los archivos (*.*)|*.*",
-            Title = "Elige un paquete .zip o .rar (Cancelar = carpeta / detectado)",
-            CheckFileExists = true,
-            Multiselect = false,
-        })
-        {
-            try
+            string auto = CursorInstaller.AutoDetectSource();
+            string[] picked = null;
+            using (var ofd = new OpenFileDialog
             {
-                if (auto is not null && File.Exists(auto))
+                Filter = $"Paquetes de cursores ({CursorInstaller.ArchiveFilePattern})|" +
+                         $"{CursorInstaller.ArchiveFilePattern}|Todos los archivos (*.*)|*.*",
+                Title = "Elige uno o varios paquetes (Cancelar = carpeta / detectado)",
+                CheckFileExists = true,
+                Multiselect = true,
+            })
+            {
+                try
                 {
-                    ofd.FileName = auto;
-                    ofd.InitialDirectory = Path.GetDirectoryName(auto);
+                    string last = _settings.LastInstallDir;
+                    if (!string.IsNullOrWhiteSpace(last) && Directory.Exists(last))
+                    {
+                        ofd.InitialDirectory = last;
+                    }
+                    else if (auto is not null && File.Exists(auto))
+                    {
+                        ofd.FileName = auto;
+                        ofd.InitialDirectory = Path.GetDirectoryName(auto);
+                    }
+                    else if (auto is not null && Directory.Exists(auto))
+                    {
+                        ofd.InitialDirectory = auto;
+                    }
+                    else
+                    {
+                        try { ofd.InitialDirectory = AppContext.BaseDirectory; } catch { }
+                    }
                 }
-                else if (auto is not null && Directory.Exists(auto))
-                {
-                    ofd.InitialDirectory = auto;
-                }
-                else
-                {
-                    try { ofd.InitialDirectory = AppContext.BaseDirectory; } catch { }
-                }
+                catch { }
+                if (ofd.ShowDialog(this) == DialogResult.OK && ofd.FileNames.Length > 0)
+                    picked = ofd.FileNames;
             }
-            catch { }
-            var picked = ofd.ShowDialog(this);
-            if (picked == DialogResult.OK && !string.IsNullOrWhiteSpace(ofd.FileName))
-                source = ofd.FileName;
-        }
-        if (source is null)
-        {
-            // Canceló el archivo: ofrecer autodetectado o carpeta.
-            if (auto is not null)
+            if (picked is not null)
             {
+                sources.AddRange(picked);
+            }
+            else if (auto is not null)
+            {
+                // Canceló el archivo: ofrecer autodetectado o carpeta.
                 var use = MessageBox.Show(this,
                     $"Se detectó material instalable:\n{auto}\n\n¿Usarlo?\n(Sí = usar detectado / No = elegir carpeta / Cancelar = salir)",
                     "Instalación en 1 clic", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
-                if (use == DialogResult.Yes) source = auto;
+                if (use == DialogResult.Yes) sources.Add(auto);
                 else if (use == DialogResult.No)
                 {
                     using var dlg = new FolderBrowserDialog { Description = "Elige la carpeta con los cursores (.zip/.rar extraídos o sueltos .cur/.ani)" };
                     if (dlg.ShowDialog(this) != DialogResult.OK) return;
-                    source = dlg.SelectedPath;
+                    sources.Add(dlg.SelectedPath);
                 }
                 else return;
             }
@@ -1744,17 +1788,29 @@ public sealed class MainForm : Form
             {
                 using var dlg = new FolderBrowserDialog { Description = "Elige la carpeta con los cursores (extraídos o sueltos .cur/.ani)" };
                 if (dlg.ShowDialog(this) != DialogResult.OK) return;
-                source = dlg.SelectedPath;
+                sources.Add(dlg.SelectedPath);
             }
         }
-        if (!File.Exists(source) && !Directory.Exists(source))
+
+        var valid = sources
+            .Where(s => Directory.Exists(s) ||
+                        (File.Exists(s) && CursorInstaller.IsArchiveFile(s)))
+            .Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (valid.Count == 0)
         {
-            Log("[Error] No se encontró el origen: " + source);
+            Log("[Error] Ningún origen válido (se esperan .zip/.rar/.7z... o carpetas): " +
+                string.Join(", ", sources));
+            MessageBox.Show(this,
+                "No hay paquetes válidos. Usa un .zip/.rar/.7z... o una carpeta con cursores.",
+                "Instalación en 1 clic", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
+        RememberInstallDir(valid.Count == 1 && Directory.Exists(valid[0])
+            ? valid[0] : Path.GetDirectoryName(valid[0]));
+
         _btnInstall.Enabled = false;
         SetProgress(0);
-        Log("Instalando desde: " + source);
+        Log($"Instalando desde: {string.Join(" | ", valid)}");
         var progress = new Progress<(int Percent, string Message)>(t =>
         {
             SetProgress(Math.Clamp(t.Percent, 0, 100));
@@ -1779,7 +1835,7 @@ public sealed class MainForm : Form
             if (dlg.Result == CursorInstaller.DuplicateAction.SkipAll) skipAllDup = true;
             return dlg.Result;
         }
-        var result = await installer.InstallAsync(source, CursorInstaller.DefaultStoreDir,
+        var result = await installer.InstallAsync(valid, CursorInstaller.DefaultStoreDir,
             progress, CancellationToken.None, skipStatic: !_settings.IncludeStatic,
             selectVariantsAsync: c => Task.FromResult(AskVariants(c)),
             confirmDuplicateAsync: n => Task.FromResult(AskDuplicate(n)));
@@ -1791,6 +1847,18 @@ public sealed class MainForm : Form
             MessageBox.Show(this, "No se pudo instalar nada.\nRevisa el registro (🔍 Ver Registro).",
                 "Instalación en 1 clic", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         _btnInstall.Enabled = true;
+    }
+
+    /// <summary>Recuerda la carpeta del último paquete para reabrir ahí el diálogo.</summary>
+    private void RememberInstallDir(string dir)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir)) return;
+            _settings.LastInstallDir = dir;
+            _settings.Save();
+        }
+        catch { }
     }
 
     private void Log(string message) => LogStore.Append(message);

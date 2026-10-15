@@ -51,22 +51,33 @@ public sealed class CursorInstaller
         string InfPath, string Group, ParsedScheme Scheme, bool AlreadyInstalled, bool IsLoose = false);
 
     /// <summary>
-    /// Examen sin instalar: extrae (si es .zip/.rar) a un temporal, lista
-    /// los .inf + los .cur/.ani sueltos y devuelve los candidatos. El
-    /// llamador debe liberar con <see cref="CleanupStaging"/>.
+    /// Examen sin instalar: extrae (si es un comprimido soportado) a uno o
+    /// varios temporales, lista los .inf + los .cur/.ani sueltos y devuelve
+    /// los candidatos. El llamador debe liberar con
+    /// <see cref="CleanupStaging(IEnumerable{string})"/>.
     /// </summary>
     public sealed record ScanPreview(
-        List<InstallCandidate> Candidates, List<string> Errors, string WorkDir, string StagingDir);
+        List<InstallCandidate> Candidates, List<string> Errors, List<string> StagingDirs);
 
     /// <summary>¿Es un archivo de cursor instalable?</summary>
     public static bool IsCursorFile(string path) =>
         path.EndsWith(".cur", StringComparison.OrdinalIgnoreCase)
         || path.EndsWith(".ani", StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>¿Es un archivo comprimido soportado (.zip/.rar)?</summary>
+    /// <summary>
+    /// Extensiones comprimidas soportadas. .zip y .rar tienen extractor
+    /// nativo (o WinRAR); el resto (7z/tar/gz/...) requiere 7-Zip.
+    /// </summary>
+    private static readonly string[] ArchiveExtensions =
+        [".zip", ".rar", ".7z", ".tar", ".gz", ".tgz", ".bz2", ".xz"];
+
+    /// <summary>Filtro de diálogo "Archivos" con todos los formatos aceptados.</summary>
+    public static string ArchiveFilePattern =>
+        string.Join(";", ArchiveExtensions.Select(e => "*" + e));
+
+    /// <summary>¿Es un archivo comprimido soportado?</summary>
     public static bool IsArchiveFile(string path) =>
-        path.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-        || path.EndsWith(".rar", StringComparison.OrdinalIgnoreCase);
+        ArchiveExtensions.Contains(Path.GetExtension(path ?? ""), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Busca material instalable junto al exe, su padre o cwd.</summary>
     public static string AutoDetectSource()
@@ -83,8 +94,7 @@ public sealed class CursorInstaller
         {
             // 1. Archivos comprimidos de primer nivel (no anidados tipo MacOS).
             var bundle = Directory.EnumerateFiles(d, "*.*", SearchOption.TopDirectoryOnly)
-                .FirstOrDefault(f => f.EndsWith(".zip", StringComparison.OrdinalIgnoreCase)
-                                   || f.EndsWith(".rar", StringComparison.OrdinalIgnoreCase));
+                .FirstOrDefault(f => IsArchiveFile(f));
             if (bundle is not null) return bundle;
             // 2. Carpeta con packs ya extraídos (contiene .inf o sueltos).
             try
@@ -107,19 +117,64 @@ public sealed class CursorInstaller
             StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Examina un origen (.zip/.rar o carpeta) y devuelve TODOS los
+    /// Examina UN origen (.zip/.rar/... o carpeta) y devuelve TODOS los
     /// cursores disponibles sin copiar nada. Soporta .inf clásicos/modernos
     /// y carpetas con .cur/.ani sueltos (cada carpeta = un esquema).
     /// </summary>
-    public async Task<ScanPreview> ScanAsync(
+    public Task<ScanPreview> ScanAsync(
         string source,
+        IProgress<(int Percent, string Message)> progress = null,
+        CancellationToken ct = default,
+        bool skipStatic = true)
+        => ScanManyAsync([source], progress, ct, skipStatic);
+
+    /// <summary>
+    /// Examina VARIOS orígenes (varios .zip/.rar/... o carpetas) y fusiona
+    /// los candidatos desduplicando por nombre de esquema (gana el primero).
+    /// Devuelve todos los temporales a liberar con CleanupStaging.
+    /// </summary>
+    public async Task<ScanPreview> ScanManyAsync(
+        IReadOnlyList<string> sources,
         IProgress<(int Percent, string Message)> progress = null,
         CancellationToken ct = default,
         bool skipStatic = true)
     {
         var errors = new List<string>();
+        var candidates = new List<InstallCandidate>();
+        var stagings = new List<string>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        int total = sources?.Count ?? 0;
+        for (int i = 0; i < total; i++)
+        {
+            string prefix = total > 1 ? $"({i + 1}/{total}) " : "";
+            var part = await ScanOneAsync(sources[i], progress, prefix, ct, skipStatic);
+            errors.AddRange(part.Errors);
+            stagings.AddRange(part.StagingDirs);
+            foreach (var c in part.Candidates)
+            {
+                if (!seen.Add(c.Scheme.SchemeName))
+                {
+                    errors.Add($"{c.Scheme.SchemeName} :: repetido entre paquetes, se conserva el primero.");
+                    continue;
+                }
+                candidates.Add(c);
+            }
+        }
+        candidates.Sort((a, b) => string.Compare(
+            a.Scheme.SchemeName, b.Scheme.SchemeName, StringComparison.OrdinalIgnoreCase));
+        return new ScanPreview(candidates, errors, stagings);
+    }
+
+    private async Task<ScanPreview> ScanOneAsync(
+        string source,
+        IProgress<(int Percent, string Message)> progress,
+        string prefix,
+        CancellationToken ct,
+        bool skipStatic)
+    {
+        var errors = new List<string>();
         if (string.IsNullOrWhiteSpace(source))
-            throw new InvalidOperationException("Elige un archivo .zip/.rar o una carpeta con cursores.");
+            throw new InvalidOperationException("Elige un archivo comprimido o una carpeta con cursores.");
         if (!File.Exists(source) && !Directory.Exists(source))
             throw new FileNotFoundException($"No se encontró el origen: {source}", source);
 
@@ -133,16 +188,17 @@ public sealed class CursorInstaller
         {
             if (!IsArchiveFile(source))
                 throw new InvalidOperationException(
-                    "Formato no soportado: " + Path.GetExtension(source) + " (usa .zip o .rar).");
+                    "Formato no soportado: " + Path.GetExtension(source) +
+                    " (usa .zip, .rar, .7z... o una carpeta).");
             staging = Path.Combine(Path.GetTempPath(),
                 "CursorRotator_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(staging);
-            progress?.Report((5, $"Extrayendo {Path.GetFileName(source)}..."));
+            progress?.Report((5, $"{prefix}Extrayendo {Path.GetFileName(source)}..."));
             await Task.Run(() => ExtractArchive(source, staging), ct);
             workDir = staging;
         }
 
-        // Anidados: "ani file.zip", packs dentro de packs (.zip y .rar).
+        // Anidados: "ani file.zip", packs dentro de packs.
         ExtractNestedArchives(workDir, errors);
 
         var infs = Directory.EnumerateFiles(workDir, "*.inf", SearchOption.AllDirectories)
@@ -162,7 +218,7 @@ public sealed class CursorInstaller
                         StringComparison.OrdinalIgnoreCase))
                 {
                     progress?.Report((5 + 40 * ++scanned / totalHints,
-                        $"Omitido (Static): {scheme.SchemeName}"));
+                        $"{prefix}Omitido (Static): {scheme.SchemeName}"));
                     continue;
                 }
                 parsed.Add((inf, scheme));
@@ -172,7 +228,7 @@ public sealed class CursorInstaller
                 errors.Add($"{inf} :: {ex.Message}");
             }
             progress?.Report((5 + 40 * ++scanned / totalHints,
-                $"Analizado: {Path.GetFileName(inf)}"));
+                $"{prefix}Analizado: {Path.GetFileName(inf)}"));
         }
 
         var covered = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -207,10 +263,12 @@ public sealed class CursorInstaller
 
         candidates.Sort((a, b) => string.Compare(
             a.Scheme.SchemeName, b.Scheme.SchemeName, StringComparison.OrdinalIgnoreCase));
-        return new ScanPreview(candidates, errors, workDir, staging);
+        var stagings = staging is null
+            ? new List<string>() : new List<string> { staging };
+        return new ScanPreview(candidates, errors, stagings);
     }
 
-    /// <summary>Libera el temporal creado por <see cref="ScanAsync"/> (best-effort).</summary>
+    /// <summary>Libera un temporal creado por el examen (best-effort).</summary>
     public static void CleanupStaging(string stagingDir)
     {
         if (string.IsNullOrEmpty(stagingDir)) return;
@@ -218,8 +276,35 @@ public sealed class CursorInstaller
         catch { }
     }
 
-    public async Task<InstallResult> InstallAsync(
+    /// <summary>Libera todos los temporales de un examen múltiple (best-effort).</summary>
+    public static void CleanupStaging(IEnumerable<string> stagingDirs)
+    {
+        if (stagingDirs is null) return;
+        foreach (var d in stagingDirs) CleanupStaging(d);
+    }
+
+    /// <summary>
+    /// Instala desde UN origen (.zip/.rar/... o carpeta). Atajo de la
+    /// sobrecarga múltiple.
+    /// </summary>
+    public Task<InstallResult> InstallAsync(
         string source,
+        string storeDir,
+        IProgress<(int Percent, string Message)> progress = null,
+        CancellationToken ct = default,
+        bool skipStatic = true,
+        Func<List<InstallCandidate>, Task<List<InstallCandidate>>> selectVariantsAsync = null,
+        Func<string, Task<DuplicateAction>> confirmDuplicateAsync = null)
+        => InstallAsync([source], storeDir, progress, ct, skipStatic,
+            selectVariantsAsync, confirmDuplicateAsync);
+
+    /// <summary>
+    /// Instala desde VARIOS orígenes (varios paquetes .zip/.rar/... y/o
+    /// carpetas): examina todos, fusiona los cursores y deja al usuario
+    /// elegir (todos o solo algunos), validando duplicados.
+    /// </summary>
+    public async Task<InstallResult> InstallAsync(
+        IReadOnlyList<string> sources,
         string storeDir,
         IProgress<(int Percent, string Message)> progress = null,
         CancellationToken ct = default,
@@ -234,7 +319,7 @@ public sealed class CursorInstaller
 
         try
         {
-            scan = await ScanAsync(source, progress, ct, skipStatic);
+            scan = await ScanManyAsync(sources, progress, ct, skipStatic);
             errors.AddRange(scan.Errors);
             var candidates = scan.Candidates;
 
@@ -318,8 +403,8 @@ public sealed class CursorInstaller
         }
         finally
         {
-            if (scan?.StagingDir is not null)
-                CleanupStaging(scan.StagingDir);
+            if (scan?.StagingDirs is not null)
+                CleanupStaging(scan.StagingDirs);
         }
         return new InstallResult(installed, errors, skipped);
     }
@@ -413,9 +498,18 @@ public sealed class CursorInstaller
                 return;
             }
             throw new InvalidOperationException(
-                "El paquete es .rar y no se encontró WinRAR ni 7-Zip. Instala WinRAR o usa la versión .zip del paquete.");
+                "El paquete es .rar y no se encontró WinRAR ni 7-Zip. Instala WinRAR/7-Zip o usa la versión .zip del paquete.");
         }
-        throw new InvalidOperationException("Formato no soportado: " + Path.GetExtension(archive));
+        // Otros formatos (.7z/.tar/.gz/...) requieren 7-Zip.
+        string sevenZip = SevenZipCandidates.FirstOrDefault(File.Exists);
+        if (sevenZip is not null)
+        {
+            RunExtractor(sevenZip, $"x -y -o\"{destDir}\" \"{archive}\"", "7-Zip");
+            return;
+        }
+        throw new InvalidOperationException(
+            $"El formato {Path.GetExtension(archive)} necesita 7-Zip instalado " +
+            "(o usa un paquete .zip/.rar).");
     }
 
     private static void RunExtractor(string exe, string args, string label)

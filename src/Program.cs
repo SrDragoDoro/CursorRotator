@@ -15,7 +15,7 @@ internal static class Program
     private static int Main(string[] args)
     {
         bool cli = args.Contains("--self-test") || args.Contains("--install")
-                || args.Contains("--install-test")
+                || args.Contains("--install-test") || args.Contains("--install-many-test")
                 || args.Contains("--trail-test") || args.Contains("--cursorcolor-test")
                 || args.Contains("--schemes-test") || args.Contains("--resolve-test")
                 || args.Contains("--apply-test") || args.Contains("--dump-ui")
@@ -202,6 +202,9 @@ internal static class Program
 
         if (args.Contains("--install-test"))
             return InstallTest();
+
+        if (args.Contains("--install-many-test"))
+            return InstallManyTest();
 
         if (args.Contains("--update-test"))
         {
@@ -1591,6 +1594,86 @@ internal static class Program
                     if (Directory.Exists(d)) Directory.Delete(d, recursive: true);
                 }
                 if (Directory.Exists(pack)) Directory.Delete(pack, recursive: true);
+            }
+            catch { }
+        }
+    }
+
+    /// <summary>
+    /// Prueba del flujo MULTI-paquete: arma tres .zip sintéticos (dos con
+    /// esquemas distintos y uno con un nombre repetido), los examina juntos
+    /// (debe fusionar y desduplicar) y luego instala dos. Limpia registro,
+    /// carpetas y temporales al terminar.
+    /// </summary>
+    private static int InstallManyTest()
+    {
+        string root = Path.Combine(Path.GetTempPath(),
+            "CursorRotator_MT_" + Guid.NewGuid().ToString("N")[..8]);
+        var created = new List<string>();
+        try
+        {
+            Directory.CreateDirectory(root);
+
+            static string MakePack(string dir, string name, string scheme, string file)
+            {
+                string sub = Path.Combine(dir, name);
+                Directory.CreateDirectory(sub);
+                File.WriteAllBytes(Path.Combine(sub, file), [0x42, 0x4D]);
+                string inf = "[Version]\nsignature=\"$CHICAGO$\"\n" +
+                    "[Scheme.Reg]\n" +
+                    $"HKCU,\"Control Panel\\Cursors\\Schemes\",\"{scheme}\",," +
+                    $"\"%10%\\Cursors\\zz\\{file}\"\n";
+                File.WriteAllText(Path.Combine(sub, "install.inf"), inf);
+                string zip = Path.Combine(dir, name + ".zip");
+                System.IO.Compression.ZipFile.CreateFromDirectory(sub, zip);
+                return zip;
+            }
+
+            string a = MakePack(root, "packA", "zzManyTestA", "a.ani");
+            string b = MakePack(root, "packB", "zzManyTestB", "b.ani");
+            string dup = MakePack(root, "packDup", "zzManyTestA", "a2.ani"); // repetido
+
+            var installer = new CursorInstaller();
+            var scan = installer.ScanManyAsync([a, b, dup], null, CancellationToken.None)
+                .GetAwaiter().GetResult();
+            int found = scan.Candidates.Count;
+            bool merged = found == 2;
+            bool dedupNote = scan.Errors.Any(e =>
+                e.Contains("repetido", StringComparison.OrdinalIgnoreCase));
+            CursorInstaller.CleanupStaging(scan.StagingDirs);
+
+            var result = installer.InstallAsync([a, b], CursorInstaller.DefaultStoreDir,
+                null, CancellationToken.None,
+                selectVariantsAsync: list => Task.FromResult(list))
+                .GetAwaiter().GetResult();
+            created.AddRange(["zzManyTestA", "zzManyTestB"]);
+            bool installed = result.Installed.Count == 2 && result.Errors.Count == 0;
+
+            bool ok = merged && dedupNote && installed;
+            Console.WriteLine($"{(ok ? "OK   " : "FALLO")} multi-paquete: " +
+                $"candidatos={found} dedup={dedupNote} " +
+                $"instalados=[{string.Join(",", result.Installed)}] " +
+                $"errores={result.Errors.Count}");
+            if (!ok)
+                foreach (var e in scan.Errors.Concat(result.Errors).Take(10))
+                    Console.WriteLine("FALLO: " + e);
+            Console.WriteLine(ok ? "=== ALL PASS ===" : "=== FAIL ===");
+            return ok ? 0 : 1;
+        }
+        finally
+        {
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    @"Control Panel\Cursors\Schemes", writable: true);
+                foreach (var s in created)
+                    key?.DeleteValue(s, throwOnMissingValue: false);
+                foreach (var s in created)
+                {
+                    string d = Path.Combine(CursorInstaller.DefaultStoreDir, s);
+                    if (Directory.Exists(d)) Directory.Delete(d, recursive: true);
+                }
+                if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
             }
             catch { }
         }

@@ -87,6 +87,8 @@ public sealed class AppSettings
     public string LastUpdateCheck { get; set; } = "";
     /// <summary>Versión omitida por el usuario (no volver a ofrecer).</summary>
     public string SkippedVersion { get; set; } = "";
+    /// <summary>Última carpeta usada al elegir un paquete para instalar.</summary>
+    public string LastInstallDir { get; set; } = "";
 
     private static string FilePath =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),

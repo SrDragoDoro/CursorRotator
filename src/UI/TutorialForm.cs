@@ -34,7 +34,7 @@ public sealed class TutorialForm : Form
         ("👋", "Bienvenido a CursorRotator",
          "Instala y rota cursores personalizados automáticamente.\nPulsa Siguiente para un tour de 30 segundos."),
         ("📦", "1 · Instalación en 1 clic",
-         "El botón púrpura detecta tus .zip/.rar, los extrae a tu carpeta personal, registra los esquemas y evita pedirte permisos de administrador."),
+         "El botón púrpura detecta tus paquetes (.zip/.rar/.7z… o carpetas), los extrae a tu carpeta personal, registra los esquemas y evita pedirte permisos de administrador. Puedes elegir varios paquetes a la vez o arrastrarlos sobre la ventana."),
         ("🔁", "2 · Rotación automática",
          "Activa la rotación, elige cada cuánto cambia (segundos, minutos, horas u horas fijas) y usa Aplicar siguiente para probar al instante. Pausar te devuelve el control manual."),
         ("✨", "3 · Estelas y efectos",

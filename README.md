@@ -28,12 +28,14 @@ sistema: todo vive en tu carpeta de usuario.
 
 ¿Viste un pack que te encantó en **DeviantArt** o VSThemes? Solo:
 
-1. Descarga el pack en `.zip` o `.rar` y ponlo junto a la app
-   (en la carpeta `Cursores`).
-2. Pulsa **📦 Instalación en 1 clic**.
+1. Descarga el pack en `.zip`, `.rar` (o `.7z`, `.tar`, `.gz`…) y ponlo
+   junto a la app (en la carpeta `Cursores`).
+2. Pulsa **📦 Instalación en 1 clic** (o **arrastra** el archivo sobre la
+   ventana). Puedes elegir **varios paquetes a la vez**.
 3. ¡Magia! ✨ La app **extrae, registra y organiza** todos los
    esquemas por ti: variantes, animados y hasta paquetes con varias
-   velocidades (Normal, 2x…), eligiendo tú cuáles instalar.
+   velocidades (Normal, 2x…), eligiendo tú cuáles instalar (todos, o solo
+   algunos con el buscador y el filtro "solo nuevos").
 
 ## 🔁 Rotación automática
 

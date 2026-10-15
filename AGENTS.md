@@ -87,6 +87,7 @@ dotnet build src\CursorRotator.csproj -c Release
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --cards-test      # galería/toggle/batch/marcos/toast/filtro
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --roles-test "Nombre"  # diálogo de roles
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --install-test    # variantes+duplicados (limpia todo)
+.\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --install-many-test  # multi-paquete: fusión+dedup (limpia todo)
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --update-test [repo]  # versiones + ruta amable sin red
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --mapping-test     # DPI/coords: mapper + raw (headless)
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --dump-ui 680 600 uidump.txt  # árbol de MainForm
@@ -144,6 +145,11 @@ Hecho reciente: marcos orbitales con interruptor `CardAnimation`,
 agenda multi-hora con destino, instalador con variantes+duplicados,
 galerías in-situ con toasts, tutorial no-modal arrastrable, intervalo
 segundos/decimales/hora(s) fija(s), auditoría de settings.
+Instalador 2.x ampliado: multi-selección de paquetes (varios .zip/.rar a la
+vez), arrastrar y soltar el paquete sobre la ventana, formatos extra
+(.7z/.tar/.gz/... vía 7-Zip), buscador+filtro "solo nuevos" y mejor vista
+previa (roles) en `VariantSelectDialog`, y recuerdo de la última carpeta
+(`LastInstallDir` en settings).
 Pendiente sugerido: editor de sonidos de clic (estilo CursorFX),
 perfiles por juego (estilo YoloMouse), empaquetado `.cape`-like.
 Settings sensibles: `%LOCALAPPDATA%\CursorRotator\settings.json`.

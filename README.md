@@ -59,9 +59,9 @@ sistema: todo vive en tu carpeta de usuario.
 ## 🔔 Actualizaciones
 
 La app **avisa sola** cuando hay versión nueva (o búscala en
-⚙️ Opciones Avanzadas → **🔄 Buscar ahora**). Para actualizar:
-descarga el `.zip`, cierra la app, descomprime y ejecuta el nuevo
-`.exe`. **Tus ajustes se conservan.** 💾
+⚙️ Opciones Avanzadas → **🔄 Buscar ahora**). Pulsa
+**Descargar e instalar** y se actualiza sola.
+**Tus ajustes se conservan.** 💾
 
 ---
 

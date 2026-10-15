@@ -10,7 +10,7 @@
     <!-- PerMonitorV2 real (no el SystemAware por defecto): coordenadas físicas
          1:1 para el overlay en ultrawide y multi-monitor con distinto DPI. -->
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
-    <Version>2.5.1</Version>
+    <Version>2.5.2</Version>
     <AssemblyName>CursorRotator</AssemblyName>
     <RootNamespace>CursorRotator</RootNamespace>
     <ApplicationIcon>..\assets\app.ico</ApplicationIcon>

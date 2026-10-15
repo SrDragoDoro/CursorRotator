@@ -43,6 +43,7 @@ src\
     Trails\              # ITrailStyle, Classic/Advanced(2)/ClickEffects,
                          # TrailCatalog, TrailEngines (7 motores), RawInputMouse…
     FramePacer.cs DisplayInfo.cs LogStore.cs UpdateChecker.cs (releases)
+    AutoUpdater.cs (in-app: descarga+bat de auto-reemplazo)
   UI\                  # todo code-only, sin .Designer (layout manual)
     MainForm.cs          # ventana + update-check (TaskDialog, descarga a Downloads)
                          # instalación, estelas, accesos; layout en LayoutRoot
@@ -54,6 +55,7 @@ src\
     TrailGalleryDialog.cs ClickGalleryDialog.cs VariantSelectDialog.cs
     DuplicateConfirmDialog.cs PrefsDialog.cs LogDialog.cs TutorialForm.cs
     TrailOverlay.cs      # overlay layered click-through (dual trail dentro)
+    UpdateProgressForm.cs# descarga+extracción con progreso/cancelación
     TrayManager.cs Theme.cs Toast.cs FlowFrame.cs (marco orbital)
     DarkListBox.cs DarkScrollBar.cs DarkScrollPanel.cs
 ```

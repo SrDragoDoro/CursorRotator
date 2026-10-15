@@ -1593,14 +1593,16 @@ public sealed class MainForm : Form
                         "Actualizaciones", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
-            var btnDl = new TaskDialogCommandLinkButton("&Descargar",
-                "Guarda el paquete .zip y abre la carpeta");
+            var btnDl = new TaskDialogCommandLinkButton(
+                "&Descargar e instalar",
+                "Descarga el paquete y actualiza la app sola");
             var btnSkip = new TaskDialogButton("&Omitir esta versión");
             var btnClose = new TaskDialogButton("Cerrar");
             var page = new TaskDialogPage
             {
                 Caption = "Actualización disponible",
-                Heading = $"Nueva versión {info.Tag} (tienes {UpdateChecker.CurrentVersion})",
+                Heading = $"¡Hay una nueva versión disponible ({info.Tag})! " +
+                          "¿Deseas descargarla e instalarla automáticamente ahora?",
                 Text = info.Notes,
                 Icon = TaskDialogIcon.Information,
                 Buttons = { btnDl, btnSkip, btnClose },
@@ -1636,29 +1638,23 @@ public sealed class MainForm : Form
                     });
                 return;
             }
-            string dest = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
-                "Downloads", $"CursorRotator-{info.Tag}.zip");
-            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-            Log($"Descargando {info.Tag}…");
-            var progress = new Progress<int>(p => SetProgress(p));
-            await UpdateChecker.DownloadAsync(info.DownloadUrl, dest, progress);
-            SetProgress(100);
-            Log("Descargado: " + dest);
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = "explorer.exe",
-                Arguments = $"/select,\"{dest}\"",
-                UseShellExecute = true,
-            });
-            MessageBox.Show("Descarga lista. Cierra la app, descomprime el .zip " +
-                "y ejecuta el nuevo CursorRotator.exe.", "Actualización",
-                MessageBoxButtons.OK, MessageBoxIcon.Information);
+            var (zipPath, extractDir, batPath) = AutoUpdater.PrepareStaging();
+            DialogResult done;
+            using (var dlg = new UpdateProgressForm(info.DownloadUrl, zipPath, extractDir, _dark))
+                done = dlg.ShowDialog(this);
+            if (done != DialogResult.OK) return; // cancelado o fallido (ya avisado)
+            string appDir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
+            Log($"Instalando {info.Tag}…");
+            AutoUpdater.GenerateUpdateScript(extractDir, appDir, batPath, zipPath);
+            AutoUpdater.LaunchUpdate(batPath);
+            Log("Reiniciando para aplicar la actualización…");
+            await Task.Delay(300);
+            Quit();
         }
         catch (Exception ex)
         {
-            Log("[Error] Descarga: " + ex.Message);
-            MessageBox.Show("No se pudo descargar: " + ex.Message,
+            Log("[Error] Actualización: " + ex.Message);
+            MessageBox.Show("No se pudo actualizar: " + ex.Message,
                 "Actualización", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
     }

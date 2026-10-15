@@ -855,6 +855,20 @@ internal static class Program
         var info = UpdateChecker.CheckAsync(repo).GetAwaiter().GetResult();
         Check($"repo '{repo}' sin crash (hasUpdate={info.HasUpdate})", true);
         Console.WriteLine($"actual={UpdateChecker.CurrentVersion}");
+
+        // Script de auto-reemplazo: se genera, contiene el flujo y NO se ejecuta.
+        string tmpBat = Path.Combine(Path.GetTempPath(),
+            "CursorRotator_Test_" + Guid.NewGuid().ToString("N")[..8] + ".bat");
+        string script = AutoUpdater.GenerateUpdateScript(
+            @"C:\Tmp\Ext", @"A:\App", tmpBat, @"C:\Tmp\Upd.zip");
+        string bat = File.ReadAllText(script);
+        Check("bat-timeout", bat.Contains("timeout /t 2"));
+        Check("bat-xcopy", bat.Contains("xcopy /Y /E /C")
+            && bat.Contains(@"""C:\Tmp\Ext\*""") && bat.Contains(@"""A:\App\"""));
+        Check("bat-rearranque", bat.Contains("start \"\"")
+            && bat.Contains(Path.Combine(@"A:\App", "CursorRotator.exe")));
+        Check("bat-limpieza", bat.Contains("rmdir /S /Q") && bat.Contains("del \"%~f0\""));
+        try { File.Delete(tmpBat); } catch { }
         Console.WriteLine(ok ? "=== ALL PASS ===" : "=== FAIL ===");
         return ok ? 0 : 1;
     }

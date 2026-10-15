@@ -13,12 +13,16 @@ puntero, con increíbles efectos visuales que **casi no consumen recursos**.
 
 Sin instaladores eternos ni permisos de Administrador. Solo:
 
-1. 📥 Descarga el archivo desde **[Releases](https://github.com/SrDragoDoro/CursorRotator/releases/tag/v2.5.0)**.
+1. 📥 Descarga el archivo desde **[Releases](https://github.com/SrDragoDoro/CursorRotator/releases/tag/v2.5.2)**.
 2. 📂 Extrae la carpeta donde quieras.
 3. ▶️ Ejecuta **`CursorRotator.exe`**.
 
 Listo. Funciona en **Windows 10 y 11 de 64 bits**, y no toca nada del
 sistema: todo vive en tu carpeta de usuario.
+
+## Versiones anteriores
+
+**[Primera versión 2.5.0](https://github.com/SrDragoDoro/CursorRotator/releases/tag/v2.5.0)**.
 
 ## 📦 Cómo añadir tus propios paquetes de cursores
 

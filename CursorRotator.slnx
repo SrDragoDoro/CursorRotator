@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CursorRotator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CursorRotator.Tests/CursorRotator.Tests.csproj" />
+  </Folder>
+</Solution>

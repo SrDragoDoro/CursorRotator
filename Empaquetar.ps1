@@ -1,4 +1,4 @@
-# Empaqueta CursorRotator para distribuir: publica el .exe y copia los
+﻿# Empaqueta CursorRotator para distribuir: publica el .exe y copia los
 # archivos de cursores junto a él. Quien lo reciba solo descomprime y
 # ejecuta CursorRotator.exe -> "Instalación en 1 clic".
 # Uso: powershell -ExecutionPolicy Bypass -File Empaquetar.ps1

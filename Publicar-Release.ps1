@@ -1,4 +1,4 @@
-# Genera el .zip distribuible para un release de GitHub:
+﻿# Genera el .zip distribuible para un release de GitHub:
 # dist\CursorRotator-vX.Y.Z.zip con el contenido de paquete\.
 # La versión sale de <Version> en src\CursorRotator.csproj.
 # Uso: powershell -ExecutionPolicy Bypass -File Publicar-Release.ps1

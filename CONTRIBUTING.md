@@ -2,9 +2,24 @@
 
 Guía para el mantenedor (tú). El usuario final solo ve `README.md`.
 
+## Tests
+
+Antes de tocar nada: verdes. La solución `CursorRotator.slnx` agrupa la app
+y la batería xUnit de `tests\CursorRotator.Tests` (lógica de Core: parser
+`.inf`, endurecimiento/seguridad, `SchemeStore`, migraciones de
+`AppSettings`, cola del rotador, instalador).
+
+```powershell
+dotnet test CursorRotator.slnx -c Release --nologo -warnaserror
+```
+
+El CI (`.github\workflows\ci.yml`) corre lo mismo en `windows-latest` +
+`dotnet publish` en cada push/PR. Cualquier test que toque el registro usa
+nombres únicos y limpia solo lo suyo; no deja esquemas ni cursores activos.
+
 ## Publicar una versión
 
-1. Sube `<Version>` en `src\CursorRotator.csproj` (hoy: `2.5.0`).
+1. Sube `<Version>` en `src\CursorRotator.csproj` (hoy: `2.5.2`).
 2. Genera el paquete y el zip del release:
    ```powershell
    powershell -ExecutionPolicy Bypass -File Empaquetar.ps1

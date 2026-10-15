@@ -114,6 +114,36 @@ public static class SchemeStore
     }
 
     /// <summary>
+    /// Mapa rol→ruta que se escribiría en el registro: 15 roles por posición
+    /// y los extras (Person/Pin) por nombre de archivo, igual que los .inf.
+    /// Puro: no toca el registro. Compartido por ApplyScheme y el dry-run.
+    /// </summary>
+    public static List<(string Role, string Path)> BuildRolePlan(string[] paths)
+    {
+        var plan = new List<(string Role, string Path)>();
+        int n = Math.Min(paths.Length, StandardRoles.Length);
+        for (int i = 0; i < n; i++)
+            plan.Add((StandardRoles[i], paths[i]));
+
+        for (int i = StandardRoles.Length; i < paths.Length; i++)
+        {
+            var leaf = System.IO.Path.GetFileName(paths[i]).ToLowerInvariant();
+            string role = null;
+            if (leaf.Contains("person")) role = "Person";
+            else if (leaf.Contains("pin")) role = "Pin";
+            if (role is not null) plan.Add((role, paths[i]));
+        }
+        return plan;
+    }
+
+    /// <summary>
+    /// Dry-run: qué roles y rutas se escribirían en HKCU\Control Panel\Cursors
+    /// si se aplicara el esquema. No modifica nada.
+    /// </summary>
+    public static List<(string Role, string Path)> PlanApply(string schemeName) =>
+        BuildRolePlan(GetResolvedSchemePaths(schemeName));
+
+    /// <summary>
     /// Aplica un esquema como cursor activo: 15 roles por posición y los
     /// extras (Person/Pin/...) por nombre de archivo, igual que los .inf.
     /// Valida cada archivo ANTES de escribir: si falta, lanza
@@ -132,19 +162,8 @@ public static class SchemeStore
         using var key = Registry.CurrentUser.CreateSubKey(CursorsKeyPath)
             ?? throw new InvalidOperationException("No se pudo abrir la clave de cursores.");
 
-        int n = Math.Min(paths.Length, StandardRoles.Length);
-        for (int i = 0; i < n; i++)
-            key.SetValue(StandardRoles[i], paths[i]);
-
-        for (int i = StandardRoles.Length; i < paths.Length; i++)
-        {
-            var leaf = Path.GetFileName(paths[i]).ToLowerInvariant();
-            string role = null;
-            if (leaf.Contains("person")) role = "Person";
-            else if (leaf.Contains("pin")) role = "Pin";
-            if (role is not null)
-                key.SetValue(role, paths[i]);
-        }
+        foreach (var (role, path) in BuildRolePlan(paths))
+            key.SetValue(role, path);
 
         key.SetValue("Scheme Source", 2, RegistryValueKind.DWord);
         NativeMethods.RefreshCursors();

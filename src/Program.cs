@@ -18,7 +18,8 @@ internal static class Program
                 || args.Contains("--install-test") || args.Contains("--install-many-test")
                 || args.Contains("--trail-test") || args.Contains("--cursorcolor-test")
                 || args.Contains("--schemes-test") || args.Contains("--resolve-test")
-                || args.Contains("--apply-test") || args.Contains("--dump-ui")
+                || args.Contains("--apply-test") || args.Contains("--plan-test")
+                || args.Contains("--dump-ui")
                 || args.Contains("--diag-scroll") || args.Contains("--roles-test")
                 || args.Contains("--settings-test") || args.Contains("--queue-test")
                 || args.Contains("--cards-test") || args.Contains("--update-test")
@@ -277,6 +278,17 @@ internal static class Program
             return ApplyTest(name);
         }
 
+        if (args.Contains("--plan-test"))
+        {
+            string name = args.SkipWhile(a => a != "--plan-test").Skip(1).FirstOrDefault();
+            if (string.IsNullOrEmpty(name))
+            {
+                Console.WriteLine("Uso: --plan-test \"Nombre del esquema\"");
+                return 2;
+            }
+            return PlanTest(name);
+        }
+
         Console.WriteLine("Modo CLI no reconocido.");
         return 2;
     }
@@ -349,6 +361,42 @@ internal static class Program
             SchemeStore.ApplyScheme(match);
             Console.WriteLine($"Aplicado OK: {match}");
             return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine("[Error] " + ex.Message);
+            return 1;
+        }
+    }
+
+    /// <summary>
+    /// Dry-run: muestra EXACTAMENTE qué valores escribiría en
+    /// HKCU\Control Panel\Cursors al aplicar un esquema (rol → ruta), sin
+    /// tocar el registro. Señala archivos faltantes (ExitCode 1 si hay).
+    /// </summary>
+    private static int PlanTest(string name)
+    {
+        var names = SchemeStore.GetSchemeNames();
+        string match = names.FirstOrDefault(n =>
+            string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+        {
+            Console.WriteLine($"No existe el esquema '{name}'.");
+            return 2;
+        }
+        try
+        {
+            var plan = SchemeStore.PlanApply(match);
+            int missing = 0;
+            Console.WriteLine($"Plan para '{match}' ({plan.Count} valor(es) de registro):");
+            foreach (var (role, path) in plan)
+            {
+                bool ok = File.Exists(path);
+                if (!ok) missing++;
+                Console.WriteLine($"  {(ok ? "OK " : "FAL")} {role,-12} -> {path}");
+            }
+            Console.WriteLine($"=== PLAN {(missing == 0 ? "OK" : $"CON {missing} FALTANTE(S)")} ===");
+            return missing == 0 ? 0 : 1;
         }
         catch (Exception ex)
         {

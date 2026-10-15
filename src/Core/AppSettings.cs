@@ -94,36 +94,23 @@ public sealed class AppSettings
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "CursorRotator", "settings.json");
 
-    public static AppSettings Load()
+    /// <summary>Carga desde el archivo estándar (%LOCALAPPDATA%).</summary>
+    public static AppSettings Load() => Load(FilePath);
+
+    /// <summary>
+    /// Carga tolerante desde una ruta explícita (costura de test): JSON
+    /// corrupto = valores por defecto, y siempre aplica las migraciones.
+    /// </summary>
+    public static AppSettings Load(string path)
     {
         try
         {
-            if (File.Exists(FilePath))
+            if (File.Exists(path))
             {
-                var s = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(FilePath))
+                var s = JsonSerializer.Deserialize<AppSettings>(File.ReadAllText(path))
                         ?? new AppSettings();
-                // Migración (solo legado): la vieja casilla equivalía a modo
-                // heredado. El modo explícito siempre gana: si ya hay un
-                // ColorMode distinto de 0, se respeta y no se pisa.
-                if (s.TrailUseColor && s.ColorMode == 0) s.ColorMode = 1;
-                // Migración de intervalo: antes solo minutos enteros.
-                if (s.IntervalSeconds <= 0)
-                    s.IntervalSeconds = Math.Max(5, s.IntervalMinutes * 60.0);
-                if (string.IsNullOrWhiteSpace(s.ScheduledTime)) s.ScheduledTime = "09:00";
-                // Repo por defecto: los ajustes viejos lo tienen vacío.
-                if (string.IsNullOrWhiteSpace(s.UpdateRepo))
-                    s.UpdateRepo = "SrDragoDoro/CursorRotator";
-                // Migración de agenda: de una hora a lista de horas.
-                if (s.ScheduledTimes is null || s.ScheduledTimes.Count == 0)
-                    s.ScheduledTimes = new List<string> { s.ScheduledTime };
-                // Migración a agenda con destino (vacío = aleatorio).
-                if (s.Schedule is null || s.Schedule.Count == 0)
-                    s.Schedule = s.ScheduledTimes
-                        .Where(t => !string.IsNullOrWhiteSpace(t)).Distinct()
-                        .Select(t => new ScheduledEntry { Time = t.Trim() }).ToList();
-                if (s.Schedule.Count == 0)
-                    s.Schedule.Add(new ScheduledEntry { Time = "09:00" });
-                s.Audit("LOAD");
+                Migrate(s);
+                s.Audit("LOAD", path);
                 return s;
             }
         }
@@ -132,23 +119,56 @@ public sealed class AppSettings
             // Ajustes corruptos: valores por defecto (se audita para cazar
             // reseteos: si ves LOAD-DEFAULTS, el archivo no se pudo leer).
             var dflt = new AppSettings();
-            dflt.Audit("LOAD-DEFAULTS");
+            dflt.Audit("LOAD-DEFAULTS", path);
             return dflt;
         }
         return new AppSettings();
     }
 
-    public void Save()
+    /// <summary>
+    /// Migraciones de compatibilidad (solo legado). Público-interno para poder
+    /// verificar cada regla sin tocar el disco.
+    /// </summary>
+    internal static void Migrate(AppSettings s)
     {
-        string dir = Path.GetDirectoryName(FilePath)!;
+        // La vieja casilla equivalía a modo heredado. El modo explícito
+        // siempre gana: si ya hay un ColorMode distinto de 0, se respeta.
+        if (s.TrailUseColor && s.ColorMode == 0) s.ColorMode = 1;
+        // Migración de intervalo: antes solo minutos enteros.
+        if (s.IntervalSeconds <= 0)
+            s.IntervalSeconds = Math.Max(5, s.IntervalMinutes * 60.0);
+        if (string.IsNullOrWhiteSpace(s.ScheduledTime)) s.ScheduledTime = "09:00";
+        // Repo por defecto: los ajustes viejos lo tienen vacío.
+        if (string.IsNullOrWhiteSpace(s.UpdateRepo))
+            s.UpdateRepo = "SrDragoDoro/CursorRotator";
+        // Migración de agenda: de una hora a lista de horas.
+        if (s.ScheduledTimes is null || s.ScheduledTimes.Count == 0)
+            s.ScheduledTimes = new List<string> { s.ScheduledTime };
+        // Migración a agenda con destino (vacío = aleatorio).
+        if (s.Schedule is null || s.Schedule.Count == 0)
+            s.Schedule = s.ScheduledTimes
+                .Where(t => !string.IsNullOrWhiteSpace(t)).Distinct()
+                .Select(t => new ScheduledEntry { Time = t.Trim() }).ToList();
+        if (s.Schedule.Count == 0)
+            s.Schedule.Add(new ScheduledEntry { Time = "09:00" });
+    }
+
+    /// <summary>Guarda en el archivo estándar (%LOCALAPPDATA%).</summary>
+    public void Save() => Save(FilePath);
+
+    /// <summary>
+    /// Guardado atómico (tmp + Move) en una ruta explícita. Si matan el
+    /// proceso a mitad, el archivo anterior queda intacto.
+    /// </summary>
+    public void Save(string path)
+    {
+        string dir = Path.GetDirectoryName(path)!;
         Directory.CreateDirectory(dir);
-        // Escritura atómica: si matan el proceso a mitad, el anterior queda
-        // intacto (un settings.json a medias provocaba "reseteo" al reabrir).
         string tmp = Path.Combine(dir, "settings.tmp");
         File.WriteAllText(tmp, JsonSerializer.Serialize(this,
             new JsonSerializerOptions { WriteIndented = true }));
-        File.Move(tmp, FilePath, overwrite: true);
-        Audit("SAVE");
+        File.Move(tmp, path, overwrite: true);
+        Audit("SAVE", path);
     }
 
     /// <summary>Traza libre al audit log (diagnóstico). Jamás lanza.</summary>
@@ -171,12 +191,12 @@ public sealed class AppSettings
     /// guardado/carga anota exe, pid y valores clave. Para diagnosticar
     /// pérdidas. Jamás lanza.
     /// </summary>
-    private void Audit(string action)
+    private void Audit(string action, string path = null)
     {
         try
         {
             string log = Path.Combine(
-                Path.GetDirectoryName(FilePath)!, "settings-audit.log");
+                Path.GetDirectoryName(path ?? FilePath)!, "settings-audit.log");
             string line = $"{DateTime.Now:HH:mm:ss} {action} " +
                 $"exe={Environment.ProcessPath ?? "?"} " +
                 $"pid={Environment.ProcessId} " +

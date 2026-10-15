@@ -1,0 +1,65 @@
+# Integración continua de CursorRotator.
+# - Compila la app con avisos como errores (regla del proyecto: 0 avisos).
+# - Ejecuta la batería de tests xUnit (lógica de Core: parser, settings, cola,
+#   instalador, registro de esquemas, endurecimiento del import).
+# - Valida que el single-file autocontenido se publica sin romperse.
+#
+# Corre en Windows: el proyecto es net10.0-windows + WinForms y los tests
+# ejercitan el registro HKCU del usuario del runner (esquemas temporales).
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-test:
+    name: Build + Tests (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configurar .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+          cache: true
+          cache-dependency-path: '**/*.csproj'
+
+      - name: Restaurar
+        run: dotnet restore CursorRotator.slnx
+
+      - name: Compilar (Release, avisos = errores)
+        run: dotnet build CursorRotator.slnx -c Release --nologo -warnaserror
+
+      - name: Tests
+        run: >
+          dotnet test CursorRotator.slnx -c Release --nologo -warnaserror
+          --no-build
+          --logger "trx;LogFileName=test-results.trx"
+          --results-directory TestResults
+
+      - name: Publicar resultados de tests
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/**/*.trx
+          if-no-files-found: ignore
+
+      - name: Publicar single-file (verifica el empaquetado)
+        run: dotnet publish src/CursorRotator.csproj -c Release --nologo -o dist-ci
+
+      - name: Comprobar que el .exe existe
+        shell: pwsh
+        run: |
+          $exe = "dist-ci/CursorRotator.exe"
+          if (-not (Test-Path $exe)) { throw "No se generó $exe" }
+          Get-Item $exe | Select-Object Name, @{n = 'MB'; e = { [math]::Round($_.Length / 1MB, 1) } }

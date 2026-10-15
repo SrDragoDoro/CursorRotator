@@ -5,6 +5,13 @@ src/bin/
 src/obj/
 .vs/
 
+# Tests (xUnit) y artefactos de CI
+tests/**/bin/
+tests/**/obj/
+TestResults/
+*.trx
+dist-ci/
+
 # Packs de cursores (binarios pesados; cada quien los pone junto al exe)
 *.zip
 *.rar

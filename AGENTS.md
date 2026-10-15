@@ -20,12 +20,14 @@ README.md            # manual de usuario (ES)
 AGENTS.md            # este archivo (traspaso IA)
 CONTRIBUTING.md      # guía del mantenedor (publicar releases)
 LICENSE              # MIT | .gitignore (sin binarios ni zips)
+CursorRotator.slnx   # solución (app + tests)
 Empaquetar.ps1       # publish Release → dist\ → arma paquete\
 Publicar-Release.ps1 # paquete\ → dist\CursorRotator-vX.Y.Z.zip (para Releases)
+.github\workflows\ci.yml  # CI: build (warnaserror) + tests + publish
 assets\              # app.ico, icon-src.png, splash.jpg (embebidos)
 dist\                # exe publicado   |  paquete\  # .exe + Cursores\ + LEEME.txt
 src\
-  CursorRotator.csproj   # net10.0-windows, Version 2.5.0, PublishSingleFile
+  CursorRotator.csproj   # net10.0-windows, Version 2.5.2, PublishSingleFile
   app.manifest           # asInvoker (sin UAC)
   Program.cs             # entrada GUI + modos CLI de diagnóstico
   Core\
@@ -58,6 +60,11 @@ src\
     UpdateProgressForm.cs# descarga+extracción con progreso/cancelación
     TrayManager.cs Theme.cs Toast.cs FlowFrame.cs (marco orbital)
     DarkListBox.cs DarkScrollBar.cs DarkScrollPanel.cs
+tests\
+  CursorRotator.Tests\    # xUnit (net10.0-windows, referencia al WinExe): parser
+                          # .inf, endurecimiento/seguridad, SchemeStore, migraciones
+                          # de AppSettings, cola del rotador, instalador. Ve helpers
+                          # internal por InternalsVisibleTo del csproj de la app.
 ```
 
 ## 3. Flujos clave
@@ -94,6 +101,8 @@ dotnet build src\CursorRotator.csproj -c Release
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --self-test "dir" # parsea .inf sin escribir
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --resolve-test    # rutas crudas vs resueltas
 .\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --apply-test "Nombre"  # aplica esquema (restaura después)
+.\src\bin\Release\net10.0-windows\win-x64\CursorRotator.exe --plan-test "Nombre"  # dry-run: rol→ruta, no escribe nada
+dotnet test CursorRotator.slnx -c Release --nologo -warnaserror   # batería xUnit (Core)
 powershell -ExecutionPolicy Bypass -File Empaquetar.ps1   # publica + rearma paquete\ (MATA procesos CursorRotator)
 powershell -ExecutionPolicy Bypass -File Publicar-Release.ps1  # zipea paquete\ → dist\CursorRotator-vX.Y.Z.zip
 ```
@@ -138,8 +147,15 @@ usuario; los tests CLI que mutan (queue/apply/install) restauran al salir.
 10. **ToolTip único** por formulario (`_tip` + `_tipTexts`, owner-drawn);
     no crear varios. `CheckBox/RadioButton` en claro: `Theme.WireCheckState`
     (negrita + pastilla; refrescar tras `ApplyTheme`).
+11. **Tests = código real de la app**: el xUnit referencia el `WinExe`
+    (no hay DLL de Core) y ve helpers `internal` por
+    `InternalsVisibleTo("CursorRotator.Tests")`. Los tests que tocan el
+    registro usan nombres únicos (`zzUnitScheme_*`) y limpian en `finally`;
+    lo puro (parser, migraciones, `BuildRolePlan`/`PlanApply`) no toca
+    registro ni cursor activo. Nada de `|| true`: si un test no compila o
+    falla, se arregla.
 
-## 6. Estado actual (2026-10-12)
+## 6. Estado actual (2026-10-15)
 
 Hecho reciente: marcos orbitales con interruptor `CardAnimation`,
 agenda multi-hora con destino, instalador con variantes+duplicados,
@@ -150,6 +166,15 @@ vez), arrastrar y soltar el paquete sobre la ventana, formatos extra
 (.7z/.tar/.gz/... vía 7-Zip), buscador+filtro "solo nuevos" y mejor vista
 previa (roles) en `VariantSelectDialog`, y recuerdo de la última carpeta
 (`LastInstallDir` en settings).
+
+**P0 de calidad (cerrado):** batería xUnit de 82 tests (`CursorRotator.slnx`,
+`tests\CursorRotator.Tests`) + CI en `.github\workflows\ci.yml` (build con
+`-warnaserror`, tests, y publish del single-file). Endurecimiento del import:
+`InfParser` confina cada fuente a la raíz del paquete, exige extensión
+`.cur/.ani`, normaliza `..`, y busca por nombre exacto (los corchetes `[`/`]`
+son literales en .NET 10; el viejo `EscapeWildcard` se eliminó). Dry-run con
+`SchemeStore.PlanApply` / CLI `--plan-test` (rol → ruta, sin escribir).
+
 Pendiente sugerido: editor de sonidos de clic (estilo CursorFX),
 perfiles por juego (estilo YoloMouse), empaquetado `.cape`-like.
 Settings sensibles: `%LOCALAPPDATA%\CursorRotator\settings.json`.

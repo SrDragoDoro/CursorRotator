@@ -30,4 +30,10 @@
     <EmbeddedResource Include="..\assets\splash.jpg" />
   </ItemGroup>
 
+  <!-- El proyecto de tests puede verificar helpers internal (SynthesizeLooseSchemes,
+       ExtractArchive, AppSettings.Migrate) sin exponerlos en la API pública. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="CursorRotator.Tests" />
+  </ItemGroup>
+
 </Project>

@@ -489,7 +489,7 @@ public sealed class MainForm : Form
         Tip(_btnToggle, "Activa o pausa la rotación automática de cursores.");
         Tip(_btnOnce, "Aplica ahora mismo el esquema mostrado como 'Siguiente' en la vista previa.");
         Tip(_btnManual, "Abre el panel de mouse de Windows para ajuste manual.");
-        Tip(_btnInstall, "Extrae, copia y registra todos los cursores en 1 clic.");
+        Tip(_btnInstall, "Elige un .zip/.rar o carpeta: examina todos los cursores y marca cuáles instalar (todos o solo algunos).");
         Tip(_numInterval, "Cada cuántos segundos, minutos u horas cambia el cursor (decimales con el teclado, p. ej. 1.5 min).");
         Tip(_cmbUnit, "Unidad del intervalo... u 'Horas fijas diarias' para programar varias horas concretas.");
         Tip(_dtpTime, "Elige una hora y el cursor destino, y pulsa + Añadir (p. ej. 11:00, 15:00, 18:00).");
@@ -1689,12 +1689,68 @@ public sealed class MainForm : Form
 
     private async Task RunInstallAsync()
     {
-        string source = CursorInstaller.AutoDetectSource();
+        // 1 clic: el usuario elige un .zip/.rar (o carpeta). Se examina el
+        // contenido y se muestran TODOS los cursores para instalar todos o
+        // solo algunos. El autodetectado solo es la sugerencia inicial.
+        string auto = CursorInstaller.AutoDetectSource();
+        string source = null;
+        using (var ofd = new OpenFileDialog
+        {
+            Filter = "Paquetes de cursores (*.zip;*.rar)|*.zip;*.rar|Archivos ZIP (*.zip)|*.zip|Archivos RAR (*.rar)|*.rar|Todos los archivos (*.*)|*.*",
+            Title = "Elige un paquete .zip o .rar (Cancelar = carpeta / detectado)",
+            CheckFileExists = true,
+            Multiselect = false,
+        })
+        {
+            try
+            {
+                if (auto is not null && File.Exists(auto))
+                {
+                    ofd.FileName = auto;
+                    ofd.InitialDirectory = Path.GetDirectoryName(auto);
+                }
+                else if (auto is not null && Directory.Exists(auto))
+                {
+                    ofd.InitialDirectory = auto;
+                }
+                else
+                {
+                    try { ofd.InitialDirectory = AppContext.BaseDirectory; } catch { }
+                }
+            }
+            catch { }
+            var picked = ofd.ShowDialog(this);
+            if (picked == DialogResult.OK && !string.IsNullOrWhiteSpace(ofd.FileName))
+                source = ofd.FileName;
+        }
         if (source is null)
         {
-            using var dlg = new FolderBrowserDialog { Description = "Elige la carpeta con los cursores (.zip/.rar o carpetas extraídas)" };
-            if (dlg.ShowDialog() != DialogResult.OK) return;
-            source = dlg.SelectedPath;
+            // Canceló el archivo: ofrecer autodetectado o carpeta.
+            if (auto is not null)
+            {
+                var use = MessageBox.Show(this,
+                    $"Se detectó material instalable:\n{auto}\n\n¿Usarlo?\n(Sí = usar detectado / No = elegir carpeta / Cancelar = salir)",
+                    "Instalación en 1 clic", MessageBoxButtons.YesNoCancel, MessageBoxIcon.Question);
+                if (use == DialogResult.Yes) source = auto;
+                else if (use == DialogResult.No)
+                {
+                    using var dlg = new FolderBrowserDialog { Description = "Elige la carpeta con los cursores (.zip/.rar extraídos o sueltos .cur/.ani)" };
+                    if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                    source = dlg.SelectedPath;
+                }
+                else return;
+            }
+            else
+            {
+                using var dlg = new FolderBrowserDialog { Description = "Elige la carpeta con los cursores (extraídos o sueltos .cur/.ani)" };
+                if (dlg.ShowDialog(this) != DialogResult.OK) return;
+                source = dlg.SelectedPath;
+            }
+        }
+        if (!File.Exists(source) && !Directory.Exists(source))
+        {
+            Log("[Error] No se encontró el origen: " + source);
+            return;
         }
         _btnInstall.Enabled = false;
         SetProgress(0);
@@ -1728,9 +1784,12 @@ public sealed class MainForm : Form
             selectVariantsAsync: c => Task.FromResult(AskVariants(c)),
             confirmDuplicateAsync: n => Task.FromResult(AskDuplicate(n)));
         SetProgress(100);
-        Log($"Listo: {result.Installed.Count} esquemas, {result.Errors.Count} errores, {result.Skipped.Count} omitidos.");
+        Log($"Examen+instalación: {result.Installed.Count} instalados, {result.Errors.Count} errores, {result.Skipped.Count} omitidos.");
         foreach (var s in result.Skipped) Log("  ○ " + s);
         foreach (var e in result.Errors) Log("  ⚠ " + e);
+        if (result.Installed.Count == 0 && result.Errors.Count > 0)
+            MessageBox.Show(this, "No se pudo instalar nada.\nRevisa el registro (🔍 Ver Registro).",
+                "Instalación en 1 clic", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         _btnInstall.Enabled = true;
     }
 

@@ -155,4 +155,62 @@ public class CursorInstallerTests
         await Assert.ThrowsAsync<InvalidOperationException>(
             () => src.ScanManyAsync(new[] { txt }));
     }
+
+    // ---------- Autodetectado acotado (regresión: recorría la unidad entera) ----------
+
+    [Fact]
+    public void DetectInDirectory_PaqueteComprimidoSuelto()
+    {
+        using var t = new TempDir();
+        string zip = t.Write("pack.zip", "x");
+        Assert.Equal(Path.GetFullPath(zip), CursorInstaller.DetectInDirectory(t.Root));
+    }
+
+    [Fact]
+    public void DetectInDirectory_SubcarpetaCursoresConPaquetes()
+    {
+        using var t = new TempDir();
+        t.Write("Cursores/a.zip", "x");
+        t.Write("Cursores/b.rar", "x");
+        Assert.Equal(Path.GetFullPath(t.Combine("Cursores")),
+            CursorInstaller.DetectInDirectory(t.Root));
+    }
+
+    [Fact]
+    public void DetectInDirectory_CarpetaConCursoresSueltos()
+    {
+        using var t = new TempDir();
+        t.Write("Neon/arrow.cur", "x");
+        Assert.Equal(Path.GetFullPath(t.Root), CursorInstaller.DetectInDirectory(t.Root));
+    }
+
+    [Fact]
+    public void DetectInDirectory_RaizDeUnidad_NuncaEsOrigen()
+    {
+        string root = Path.GetPathRoot(Path.GetFullPath(Path.GetTempPath()));
+        Assert.NotNull(root);
+        Assert.Null(CursorInstaller.DetectInDirectory(root));
+    }
+
+    [Fact]
+    public void DetectInDirectory_RespetarProfundidadMaxima()
+    {
+        using var t = new TempDir();
+        // 5 niveles: fuera del límite (3) => no debe detectarse.
+        t.Write("a/b/c/d/e/arrow.cur", "x");
+        Assert.Null(CursorInstaller.DetectInDirectory(t.Root));
+
+        // 3 niveles sí entra dentro del límite.
+        using var ok = new TempDir();
+        ok.Write("a/b/c/arrow.cur", "x");
+        Assert.Equal(Path.GetFullPath(ok.Root), CursorInstaller.DetectInDirectory(ok.Root));
+    }
+
+    [Fact]
+    public void DetectInDirectory_IgnoraCarpetasDeSistemaYMacOS()
+    {
+        using var t = new TempDir();
+        t.Write("MacOS/arrow.cur", "x");
+        Assert.Null(CursorInstaller.DetectInDirectory(t.Root));
+    }
 }

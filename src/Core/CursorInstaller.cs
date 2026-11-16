@@ -79,37 +79,157 @@ public sealed class CursorInstaller
     public static bool IsArchiveFile(string path) =>
         ArchiveExtensions.Contains(Path.GetExtension(path ?? ""), StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Busca material instalable junto al exe, su padre o cwd.</summary>
+    /// <summary>
+    /// Busca material instalable junto al exe, en su padre o en el cwd.
+    /// La búsqueda está ACOTADA (profundidad, nº de carpetas/archivos) y
+    /// nunca entra en la raíz de una unidad ni en carpetas de sistema:
+    /// antes, con el exe en una carpeta de primer nivel (p. ej. X:\App\),
+    /// se recorría la unidad entera y el botón parecía colgado.
+    /// </summary>
     public static string AutoDetectSource()
     {
-        string exeDir = AppContext.BaseDirectory;
-        var dirs = new[]
+        try
         {
-            exeDir,
-            Directory.GetParent(exeDir.TrimEnd(Path.DirectorySeparatorChar))?.FullName,
-            Environment.CurrentDirectory,
-        }.Where(d => d is not null).Distinct();
-
-        foreach (var d in dirs)
-        {
-            // 1. Archivos comprimidos de primer nivel (no anidados tipo MacOS).
-            var bundle = Directory.EnumerateFiles(d, "*.*", SearchOption.TopDirectoryOnly)
-                .FirstOrDefault(f => IsArchiveFile(f));
-            if (bundle is not null) return bundle;
-            // 2. Carpeta con packs ya extraídos (contiene .inf o sueltos).
-            try
-            {
-                if (Directory.EnumerateFiles(d, "*.inf", SearchOption.AllDirectories)
-                        .Any(f => !IsExcluded(f)))
-                    return d;
-                if (Directory.EnumerateFiles(d, "*.cur", SearchOption.AllDirectories)
-                        .Concat(Directory.EnumerateFiles(d, "*.ani", SearchOption.AllDirectories))
-                        .Any(f => !IsExcluded(f)))
-                    return d;
-            }
+            string exeDir = AppContext.BaseDirectory;
+            string parent = null;
+            try { parent = Directory.GetParent(exeDir.TrimEnd(Path.DirectorySeparatorChar))?.FullName; }
             catch { }
+            return new[] { exeDir, Environment.CurrentDirectory, parent }
+                .Where(d => !string.IsNullOrWhiteSpace(d))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Select(DetectInDirectory)
+                .FirstOrDefault(found => found is not null);
         }
-        return null;
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>Límites del autodetectado (evita recorrer una unidad entera).</summary>
+    private const int AutoDetectMaxDepth = 3;
+    private const int AutoDetectMaxDirs = 1500;
+    private const int AutoDetectMaxFiles = 15000;
+
+    /// <summary>Subcarpetas donde suele venir el material del paquete.</summary>
+    private static readonly string[] BundleFolderNames =
+        ["Cursores", "Cursors", "CursorPacks", "Packs"];
+
+    /// <summary>Carpetas que nunca se recorren (sistema, basura o bibliotecas enormes).</summary>
+    private static readonly string[] UnscannableDirNames =
+    [
+        "$RECYCLE.BIN", "System Volume Information", "$WinREAgent", "Recovery",
+        "Windows", "Program Files", "Program Files (x86)", "ProgramData",
+        "AppData", "node_modules", ".git", "SteamLibrary", "steamapps",
+    ];
+
+    /// <summary>
+    /// Examina UNA carpeta candidata. Devuelve un .zip/.rar suelto, una
+    /// subcarpeta con material o la propia carpeta; nunca la raíz de una
+    /// unidad ni una carpeta de sistema. <c>null</c> si no hay nada.
+    /// </summary>
+    internal static string DetectInDirectory(string dir)
+    {
+        if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir)) return null;
+        try { dir = Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar); }
+        catch { return null; }
+        if (dir.Length == 0 || IsUnitRoot(dir) || IsSystemFolder(dir)) return null;
+
+        // 1. Paquete comprimido suelto en el primer nivel.
+        string archive = FirstArchive(dir);
+        if (archive is not null) return archive;
+
+        // 2. Subcarpeta habitual ("Cursores") con paquetes o cursores dentro.
+        foreach (string name in BundleFolderNames)
+        {
+            string sub = Path.Combine(dir, name);
+            if (!Directory.Exists(sub)) continue;
+            if (FirstArchive(sub) is not null || ContainsCursorMaterial(sub)) return sub;
+        }
+
+        // 3. La propia carpeta (búsqueda acotada por profundidad y nº de entradas).
+        return ContainsCursorMaterial(dir) ? dir : null;
+    }
+
+    private static string FirstArchive(string dir)
+    {
+        try
+        {
+            return Directory.EnumerateFiles(dir, "*.*", SearchOption.TopDirectoryOnly)
+                .FirstOrDefault(IsArchiveFile);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>¿Hay .inf o .cur/.ani bajo <paramref name="root"/> (dentro de los límites)?</summary>
+    private static bool ContainsCursorMaterial(string root)
+    {
+        var pending = new Stack<(string Dir, int Depth)>();
+        pending.Push((root, 0));
+        int dirs = 0;
+        int files = 0;
+        while (pending.Count > 0)
+        {
+            var (dir, depth) = pending.Pop();
+            if (++dirs > AutoDetectMaxDirs) return false;
+
+            List<string> entries;
+            try { entries = Directory.EnumerateFileSystemEntries(dir).ToList(); }
+            catch { continue; }
+
+            foreach (string entry in entries)
+            {
+                if (++files > AutoDetectMaxFiles) return false;
+                try
+                {
+                    if (Directory.Exists(entry))
+                    {
+                        if (depth < AutoDetectMaxDepth && !IsUnscannable(entry))
+                            pending.Push((entry, depth + 1));
+                    }
+                    else if (IsCursorMaterialFile(entry))
+                    {
+                        return true;
+                    }
+                }
+                catch { }
+            }
+        }
+        return false;
+    }
+
+    private static bool IsCursorMaterialFile(string path) =>
+        (path.EndsWith(".inf", StringComparison.OrdinalIgnoreCase)
+         || path.EndsWith(".cur", StringComparison.OrdinalIgnoreCase)
+         || path.EndsWith(".ani", StringComparison.OrdinalIgnoreCase))
+        && !IsExcluded(path);
+
+    private static bool IsUnscannable(string path)
+    {
+        try
+        {
+            if (UnscannableDirNames.Contains(Path.GetFileName(path), StringComparer.OrdinalIgnoreCase))
+                return true;
+            return (File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0;
+        }
+        catch { return true; }
+    }
+
+    private static bool IsUnitRoot(string path)
+    {
+        string root = Path.GetPathRoot(path);
+        return string.IsNullOrEmpty(root)
+            || string.Equals(root.TrimEnd(Path.DirectorySeparatorChar), path,
+                StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSystemFolder(string path)
+    {
+        string win = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+        if (string.IsNullOrEmpty(win)) return false;
+        win = win.TrimEnd(Path.DirectorySeparatorChar);
+        return string.Equals(path, win, StringComparison.OrdinalIgnoreCase)
+            || path.StartsWith(win + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
     }
 
     public static bool IsExcluded(string path) =>

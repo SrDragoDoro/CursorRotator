@@ -167,13 +167,18 @@ vez), arrastrar y soltar el paquete sobre la ventana, formatos extra
 previa (roles) en `VariantSelectDialog`, y recuerdo de la última carpeta
 (`LastInstallDir` en settings).
 
-**P0 de calidad (cerrado):** batería xUnit de 82 tests (`CursorRotator.slnx`,
+**P0 de calidad (cerrado):** batería xUnit de 88 tests (`CursorRotator.slnx`,
 `tests\CursorRotator.Tests`) + CI en `.github\workflows\ci.yml` (build con
 `-warnaserror`, tests, y publish del single-file). Endurecimiento del import:
 `InfParser` confina cada fuente a la raíz del paquete, exige extensión
 `.cur/.ani`, normaliza `..`, y busca por nombre exacto (los corchetes `[`/`]`
 son literales en .NET 10; el viejo `EscapeWildcard` se eliminó). Dry-run con
 `SchemeStore.PlanApply` / CLI `--plan-test` (rol → ruta, sin escribir).
+Autodetectado del instalador acotado (`CursorInstaller.DetectInDirectory`:
+profundidad 3, 1500 carpetas/15000 archivos, nunca la raíz de una unidad ni
+carpetas de sistema): antes, con el exe en `X:\App\`, el "1 clic" recorría la
+unidad entera y parecía colgado. `RunInstallAsync` envuelve el flujo, evita
+re-entradas y reactiva el botón siempre.
 
 Pendiente sugerido: editor de sonidos de clic (estilo CursorFX),
 perfiles por juego (estilo YoloMouse), empaquetado `.cape`-like.

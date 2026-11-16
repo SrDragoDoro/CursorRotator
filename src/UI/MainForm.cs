@@ -69,6 +69,8 @@ public sealed class MainForm : Form
     private bool _suspendDirty;
     /// <summary>Salida en curso (el menú Salir no debe ser cancelado).</summary>
     private bool _exiting;
+    /// <summary>Instalación en curso: evita dos instalaciones simultáneas.</summary>
+    private bool _installRunning;
     private ToolTip _tip;
     private readonly Dictionary<Control, string> _tipTexts = new();
 
@@ -1721,6 +1723,30 @@ public sealed class MainForm : Form
     }
 
     private async Task RunInstallAsync(IReadOnlyList<string> preselected = null)
+    {
+        if (_installRunning) return;
+        _installRunning = true;
+        try
+        {
+            await RunInstallCoreAsync(preselected);
+        }
+        catch (Exception ex)
+        {
+            Log("[Error] Instalación: " + ex.Message);
+            MessageBox.Show(this,
+                "No se pudo completar la instalación:\n" + ex.Message +
+                "\n\nRevisa el registro (🔍 Ver Registro).",
+                "Instalación en 1 clic", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            _installRunning = false;
+            // El botón no puede quedarse bloqueado si algo falla a mitad.
+            if (_btnInstall is { IsDisposed: false }) _btnInstall.Enabled = true;
+        }
+    }
+
+    private async Task RunInstallCoreAsync(IReadOnlyList<string> preselected = null)
     {
         // 1 clic: el usuario elige uno o VARIOS paquetes (.zip/.rar/.7z...) o
         // una carpeta (también vale arrastrarlos a la ventana). Se examina el
